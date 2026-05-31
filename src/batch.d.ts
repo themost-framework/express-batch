@@ -1,19 +1,18 @@
 import {Router } from 'express';
 
-declare global {
-    namespace http {
-        interface IncomingMessage {
-            batchReq?: BatchRequestMessage
-            parentReq?: IncomingMessage;
-        }
-    }
-    namespace Express {
-        interface Request {
-            batchReq?: BatchRequestMessage
-            parentReq?: Request;
-        }
+declare module 'http' {
+    interface IncomingMessage {
+        batchReq?: BatchRequestMessage
+        parentReq?: IncomingMessage;
     }
 }
+declare module 'express' {
+    interface Request {
+        batchReq?: BatchRequestMessage
+        parentReq?: Request;
+    }
+}
+
 
 export declare function batch(routerOrApplication: Router, options?: { headers: string[], min?: number, max?: number }): Router;
 
