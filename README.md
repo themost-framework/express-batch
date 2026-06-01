@@ -332,6 +332,30 @@ $$1.metadata.createdAt   // Deep nesting
    - `$$2.id` → `500`
    - Sends notification
 
+Double dollar references can be used in request URLs where such expressions can produce a valid URL segment, but they are most commonly used in request bodies for dynamic data injection.
+
+```json
+{
+  "requests": [
+    {
+      "id": "1",
+      "method": "POST",
+      "url": "/api/People",
+      "body": {
+        "name": "Jane Smith",
+        "email": "jane@example.com",
+        "phone": "+1234567890"
+      }
+    },
+    {
+      "id": "2",
+      "method": "GET",
+      "url": "/api/People/$filter=id eq $$1.id"
+    }
+  ]
+}
+```
+
 ---
 
 ## Atomicity Groups (Changesets)
@@ -1373,15 +1397,6 @@ app.use('/api/', batch(app, {
   // Maximum number of requests per batch
   max: 25,
   
-  // Enable atomicity group support
-  atomicityGroups: true,
-  
-  // Transaction timeout in milliseconds
-  transactionTimeout: 30000,
-  
-  // Database isolation level
-  isolationLevel: 'READ_COMMITTED',
-  
   // Headers to inherit from parent request
   headers: [
     'authorization',
@@ -1753,107 +1768,6 @@ if (allSucceeded) {
 - 🔒 **Guaranteed consistency**
 - 📦 **Simpler error handling**
 
----
-
-## Troubleshooting
-
-### Issue: Atomicity Group Not Rolling Back
-
-**Symptom:** Partial data remains in database after failure
-
-**Causes:**
-1. Database doesn't support transactions
-2. Transaction not properly configured
-3. Requests not in same atomicity group
-
-**Solution:**
-```javascript
-// Verify transaction support
-const config = {
-  atomicityGroups: true,  // Must be enabled
-  transactionTimeout: 30000
-};
-
-// Check all requests have same group name
-requests.forEach(r => {
-  console.log(`${r.id}: ${r.atomicityGroup}`);
-});
-```
-
-### Issue: 424 Status on All Requests
-
-**Symptom:** All requests in batch return 424
-
-**Causes:**
-1. First request in group failed
-2. Database transaction error
-3. Timeout exceeded
-
-**Solution:**
-```javascript
-// Find the original failure
-const originalFailure = responses.find(r => 
-  r.status >= 400 && r.status !== 424
-);
-console.error('Original failure:', originalFailure);
-```
-
-### Issue: References Not Resolving
-
-**Symptom:** `$$1.id` appears literally in created entities
-
-**Causes:**
-1. Referenced request failed (check status)
-2. Request rolled back due to group failure
-3. Property path is incorrect
-4. Request order is wrong
-
-**Solution:**
-```javascript
-// Check responses
-responses.forEach(r => {
-  console.log(`Request ${r.id}: Status ${r.status}`);
-  if (r.status === 424) {
-    console.log(`  Rolled back in group: ${r.body.atomicityGroup}`);
-  }
-  if (r.status >= 400) {
-    console.error(`  Failed: ${r.body.message}`);
-  }
-});
-```
-
-### Issue: Transaction Timeout
-
-**Symptom:** 500 error - "Transaction timeout"
-
-**Causes:**
-1. Too many operations in one group
-2. Slow database operations
-3. Lock contention
-
-**Solution:**
-```javascript
-// Split into smaller groups
-{
-  "requests": [
-    // Group 1: 2-3 operations
-    {"atomicityGroup": "group-1"},
-    {"atomicityGroup": "group-1"},
-    
-    // Group 2: 2-3 operations
-    {"atomicityGroup": "group-2"},
-    {"atomicityGroup": "group-2"}
-  ]
-}
-
-// Or increase timeout
-batch(app, {
-  transactionTimeout: 60000  // 60 seconds
-});
-```
-
----
-
 ## Security Considerations
 
 ### 1. Authentication
@@ -1892,16 +1806,6 @@ Response:
 
 **Security benefit:** Authorization failures trigger rollback, preventing partial operations.
 
-### 3. Transaction Isolation
-
-Configure appropriate isolation level:
-
-```javascript
-batch(app, {
-  isolationLevel: 'READ_COMMITTED'  // Prevent dirty reads
-});
-```
-
 ### 4. Rate Limiting
 
 Consider limiting atomicity groups:
@@ -1910,58 +1814,6 @@ Consider limiting atomicity groups:
 // Limit transaction complexity per user
 const MAX_ATOMICITY_GROUP_SIZE = 10;
 const MAX_CONCURRENT_TRANSACTIONS = 5;
-```
-
----
-
-## Performance Tips
-
-### 1. Transaction Duration
-
-**Target:** Keep transactions under 5 seconds
-
-```javascript
-// ✅ Good: Small, focused transaction
-"atomicityGroup": "order-tx"
-// 3 operations: customer + order + payment
-
-// ❌ Bad: Large, complex transaction
-"atomicityGroup": "huge-tx"
-// 20+ operations: high failure risk, long locks
-```
-
-### 2. Database Optimization
-
-Ensure proper indexing:
-
-```sql
--- Index foreign keys used in transactions
-CREATE INDEX idx_orders_customer_id ON orders(customer_id);
-CREATE INDEX idx_payments_order_id ON payments(order_id);
-```
-
-### 3. Lock Contention
-
-Minimize lock contention:
-
-- **Avoid long-running read operations in atomicity groups**
-- **Order operations to minimize lock time**
-- **Use appropriate isolation level**
-
-### 4. Connection Pooling
-
-Configure adequate connection pool:
-
-```javascript
-{
-  database: {
-    pool: {
-      min: 5,
-      max: 20,
-      acquireTimeoutMillis: 30000
-    }
-  }
-}
 ```
 
 ---

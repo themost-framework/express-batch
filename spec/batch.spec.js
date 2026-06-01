@@ -452,6 +452,12 @@ describe('Batch', () => {
                     },
                     {
                         id: '2',
+                        method: 'GET',
+                        atomicityGroup: 'create-order',
+                        url: '/api/people/$$1.id',
+                    },
+                    {
+                        id: '3',
                         method: 'POST',
                         atomicityGroup: 'create-order',
                         url: '/api/orders',
@@ -459,8 +465,46 @@ describe('Batch', () => {
                             orderedItem: {
                                 name: 'Apple MacBook Air (13.3-inch, 2013 Version)',
                             },
-                            customer: '$$1.id'
+                            customer: '$$2.id'
                         }
+                    }
+                ]
+            });
+        expect(response.status).toEqual(200);
+        for(const r of response.body.responses) {
+            expect(r.body).toBeDefined();
+            expect(r.status).toEqual(200);
+        }
+    });
+
+    it('should use property references in URLs', async () => {
+        const mock = jest.spyOn(passportStrategy, 'getUser');
+        mock.mockImplementation(() => {
+            return {
+                name: 'alexis.rees@example.com'
+            };
+        });
+        let response = await request(app).post('/api/$batch')
+            .set('Content-Type', 'application/json')
+            .set('Accept', 'application/json')
+            .send({
+                requests: [
+                    {
+                        "id": "1",
+                        "method": "POST",
+                        "url": "/api/People",
+                        "atomicityGroup": "createPerson",
+                        "body": {
+                            "name": "Jane Smith",
+                            "email": "jane@example.com",
+                            "phone": "+1234567890"
+                        }
+                    },
+                    {
+                        "id": "2",
+                        "method": "GET",
+                        "atomicityGroup": "createPerson",
+                        "url": "/api/People?$filter=id eq $$1.id"
                     }
                 ]
             });

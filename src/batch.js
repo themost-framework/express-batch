@@ -47,6 +47,27 @@ class BatchIncomingMessage extends IncomingMessage {
             delete this.headers['content-length'];
         }
     }
+
+}
+/**
+ * Formats the URL of a batch request by replacing any parameter references in the URL with the corresponding values from the results of previously executed batch requests.
+ * Parameter references in the URL should be in the format `$$<id>.<propertyPath>`, where `id` is the `id` of a previously executed batch request and `<propertyPath>` 
+ * is the path to the desired value in the response body of that batch request e.g. $$order.id, $$order.customer.id, or even $$order.items[0].name.
+ * @param {string} url 
+ * @param {*} params 
+ * @returns 
+ */
+function tryFormatUrl(url, params) {
+    const regex = /\$\$(\w+)\.(\w+(?:(?:\.\w+)|(?:\[\d+\]))*)\b/g;
+    return url.replace(regex, (match, id, path) => {
+        const result = params.find(r => r.id === id);
+        if (result) {
+            const [val] = at(result.body, path.split('.'));
+            return val;
+        } else {
+            throw new HttpBadRequestError(`Batch request with id "${id}" cannot be found for URL reference "${match}"`);
+        }
+    });
 }
 
 class BatchServerResponse extends ServerResponse {
@@ -325,6 +346,7 @@ function batch(routerOrApplication, options) {
                             return req.context.db.executeInTransactionAsync(async () => {
                                 await Promise.sequence(requests.map((request) => {
                                     return () => {
+                                        request.url = tryFormatUrl(request.url, results);
                                         // parse body for assigning params in the batch request
                                         if (request.body && typeof request.body === 'object') {
                                             const body = JSON.parse(JSON.stringify(request.body), (key, value) => {
@@ -346,6 +368,18 @@ function batch(routerOrApplication, options) {
                                                 return value;
                                             });
                                             request.body = request._body = body;
+                                        }
+                                        // try to parse url for assigning params in the batch request
+                                        if (request.url && typeof request.url === 'string') {
+                                            request.url = request.url.replace(/\$\$(\d+)\.([a-zA-Z0-9_.]+)/g, (match, id, path) => {
+                                                const result = results.find(r => r.id === id);
+                                                if (result) {
+                                                    const [val] = at(result.body, path.split('.'));
+                                                    return val;
+                                                } else {
+                                                    throw new HttpBadRequestError(`Batch request with id "${id}" cannot be found for URL reference "${match}"`);
+                                                }
+                                            });
                                         }
                                         return executeBatchRequestAsync(request).then((intermediateResult) => {
                                             const result = results.find(r => r.id === request.id);
