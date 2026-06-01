@@ -59,16 +59,66 @@ class BatchIncomingMessage extends IncomingMessage {
  */
 function tryFormatUrl(url, params) {
     const regex = /\$\$(\w+)\.(\w+(?:(?:\.\w+)|(?:\[\d+\]))*)\b/g;
-    return url.replace(regex, (match, id, path) => {
+    const str = url.replace(regex, (match, id, path) => {
         const result = params.find(r => r.id === id);
         if (result) {
             const [val] = at(result.body, path.split('.'));
-            return val;
+            return escapeURIComponent(val);
         } else {
             throw new HttpBadRequestError(`Batch request with id "${id}" cannot be found for URL reference "${match}"`);
         }
     });
+    return str;
 }
+
+function escapeURIComponent(val) {
+    if ((val == null) || (typeof val === 'undefined')) {
+            return 'null';
+        }
+        if (typeof val === 'boolean') {
+            return (val) ? 'true' : 'false';
+        }
+        if (typeof val === 'number') {
+            return val.toString();
+        }
+        if (val instanceof Date) {
+            const dt = val;
+            const year   = dt.getFullYear();
+            const month  = TextUtils.zeroPad(dt.getMonth() + 1, 2);
+            const day    = TextUtils.zeroPad(dt.getDate(), 2);
+            const hour   = TextUtils.zeroPad(dt.getHours(), 2);
+            const minute = TextUtils.zeroPad(dt.getMinutes(), 2);
+            const second = TextUtils.zeroPad(dt.getSeconds(), 2);
+            const millisecond = TextUtils.zeroPad(dt.getMilliseconds(), 3);
+            // format timezone
+            const offset = (new Date()).getTimezoneOffset();
+            const timezone = (offset >= 0 ? '+' : '') + TextUtils.zeroPad(Math.floor(offset / 60), 2) +
+                ':' + TextUtils.zeroPad(offset % 60, 2);
+            return '\'' + year + '-' + month + '-' + day + ' ' + hour + ':' + minute + ':' + second + '.' + millisecond + timezone + '\'';
+        }
+        if (val instanceof Array) {
+            const values = [];
+            val.forEach((x) => {
+                values.push(escapeURIComponent(x));
+            });
+            return values.join(',');
+        }
+        if (typeof val === 'string') {
+            const res = val.replace(/[\0\n\r\b\t\\'"\x1a]/g, (s) => {
+                switch (s) {
+                    case '\0': return '\\0';
+                    case '\n': return '\\n';
+                    case '\r': return '\\r';
+                    case '\b': return '\\b';
+                    case '\t': return '\\t';
+                    case '\x1a': return '\\Z';
+                    default: return '\\' + s;
+                }
+            });
+            return '\'' + res + '\'';
+        }
+        return escapeURIComponent(val.valueOf());
+    }
 
 class BatchServerResponse extends ServerResponse {
     /**

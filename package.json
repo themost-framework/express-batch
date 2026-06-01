@@ -20,6 +20,7 @@
     "@eslint/js": "^9.15.0",
     "@rollup/plugin-babel": "^6.0.4",
     "@rollup/plugin-typescript": "^12.1.2",
+    "@themost/client": "^2.17.0",
     "@themost/common": "^2.12.0",
     "@themost/data": "^2.23.8",
     "@themost/express": "^5.1.2",
@@ -49,6 +50,7 @@
     "typescript-eslint": "^8.16.0"
   },
   "peerDependencies": {
+    "@themost/client": "^2",
     "@themost/common": "^2",
     "@themost/express": "^1 || ^4 || ^5"
   },
