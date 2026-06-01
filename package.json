@@ -1,6 +1,6 @@
 {
   "name": "@themost/express-batch",
-  "version": "0.0.0",
+  "version": "1.1.0",
   "description": "A batch processing middleware for @themost/express services",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",
